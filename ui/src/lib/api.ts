@@ -192,7 +192,7 @@ export const api = {
   searches: () => get<{ searches: SearchRow[] }>("/api/searches"),
   searchResults: (id: number) =>
     get<{ search: SearchRow; papers: PaperCard[] }>(`/api/searches/${id}/results`),
-  runSearch: (body: { query: string; limit?: number; year_from?: number; year_to?: number }) =>
+  runSearch: (body: { query: string; limit?: number; year_from?: number; year_to?: number; source?: string }) =>
     post<{
       search_id: number;
       n_fetched: number;

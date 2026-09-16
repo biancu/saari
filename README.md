@@ -10,6 +10,16 @@ whatever order the work requires. All state lives in a `.saaristo/` directory
 inside your own project folder, in SQLite. Local-first, no accounts, and the
 core loop needs no API keys: search uses OpenAlex, embeddings run locally.
 
+**Sources.** OpenAlex is the default (keyless). Scopus is available as a
+second database (`saari search "..." --source scopus`): set `SCOPUS_API_KEY`
+(create one at dev.elsevier.com) and note that a key alone only works from a
+network Elsevier has registered for your institution's subscription — off
+that network you also need `SCOPUS_INST_TOKEN`, an institutional token your
+library requests from Elsevier. Results are deduplicated across sources by
+DOI, PRISMA reporting splits identification per database, and Scopus search
+records usually arrive without abstracts (Elsevier entitlement) — a matching
+OpenAlex hit on the same DOI supplies the abstract.
+
 One toolkit, three surfaces with the same operations:
 
 - **MCP server** (`saari-mcp`) — for agents. The primary interface.

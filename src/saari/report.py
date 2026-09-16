@@ -423,15 +423,31 @@ def reference_list(papers: list[Paper]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def limitations_block() -> str:
-    """Auto-disclosed method limitations so the draft cannot overclaim."""
+def limitations_block(by_source: dict[str, int] | None = None) -> str:
+    """Auto-disclosed method limitations so the draft cannot overclaim.
+
+    `by_source` (record counts per search source) makes the sources bullet
+    factual: single-source wording only when a single database was used.
+    """
+    databases = sorted(k for k in (by_source or {}) if k not in ("snowball", "unknown"))
+    if len(databases) > 1:
+        src_bullet = (
+            f"- **Bibliographic sources.** Records were identified via {len(databases)} "
+            f"databases ({', '.join(databases)}) plus citation snowballing. Coverage is "
+            "bounded by these databases' indexing and English-language metadata.\n"
+        )
+    else:
+        db_name = databases[0] if databases else "OpenAlex"
+        src_bullet = (
+            f"- **Single bibliographic source.** Records were identified via the {db_name} API "
+            "(plus citation snowballing), not multiple databases (e.g. Scopus, Web of Science, "
+            f"IEEE Xplore). Coverage is bounded by {db_name} indexing and English-language metadata.\n"
+        )
     return (
         "This review was produced with saari and carries the following method limitations, "
         "which readers should weigh:\n\n"
-        "- **Single bibliographic source.** Records were identified via the OpenAlex API "
-        "(plus citation snowballing), not multiple databases (e.g. Scopus, Web of Science, "
-        "IEEE Xplore). Coverage is bounded by OpenAlex indexing and English-language metadata.\n"
-        "- **Single-reviewer screening.** Inclusion/exclusion decisions were made by a single "
+        + src_bullet
+        + "- **Single-reviewer screening.** Inclusion/exclusion decisions were made by a single "
         "reviewer (human or LLM agent). There was no second independent reviewer and no "
         "inter-rater agreement statistic (e.g. Cohen's κ).\n"
         "- **Title/abstract screening only.** Unless full texts were separately retrieved and "
@@ -498,7 +514,7 @@ def build_paper_md(
     out.append("\n### 2.4 Synthesis method\n")
     out.append(_slot("Describe the synthesis approach (narrative / thematic)"))
     out.append("\n### 2.5 Limitations of this review\n")
-    out.append(limitations_block())
+    out.append(limitations_block(prisma["identification"]["by_source"]))
 
     out.append("\n## 3. Results\n")
     out.append("\n### 3.1 Study selection\n")

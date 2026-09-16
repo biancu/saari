@@ -14,7 +14,7 @@ Routes:
     POST /api/papers/{id}/screen
     POST /api/papers/{id}/snowball
     GET  /api/searches
-    POST /api/searches               (runs an OpenAlex search)
+    POST /api/searches               (openalex or scopus, DOI-deduped)
     GET  /api/searches/{id}/results
     GET  /api/projection
     POST /api/embed
@@ -58,7 +58,6 @@ from saari.projection import (
     project_corpus as _project_corpus,
 )
 from saari.snowball import snowball as _snowball
-from saari.sources import openalex as oa
 
 
 # ---------- response shapes ----------
@@ -128,6 +127,7 @@ class SearchIn(BaseModel):
     limit: int = 25
     year_from: int | None = None
     year_to: int | None = None
+    source: str = "openalex"
 
 
 class QueryIn(BaseModel):
@@ -439,41 +439,23 @@ def create_app() -> FastAPI:
         return {"searches": rows}
 
     @app.post("/api/searches")
-    def run_search(body: SearchIn) -> dict[str, Any]:
-        root = paths.project_root()
-        fetched = oa.search(
-            body.query,
-            limit=body.limit,
-            year_from=body.year_from,
-            year_to=body.year_to,
-            project_root=root,
-        )
-        paper_ids = [p.id for p, _ in fetched]
-        existing_ids: set[str] = set()
-        with db.connect(paths.db_path(root)) as con:
-            if paper_ids:
-                rows = con.execute(
-                    f"SELECT id FROM paper WHERE id IN ({','.join(['?'] * len(paper_ids))})",
-                    paper_ids,
-                ).fetchall()
-                existing_ids = {row["id"] for row in rows}
-            for paper, raw_path in fetched:
-                db.upsert_paper(con, paper, raw_path=raw_path)
-            search_id = db.record_search(
-                con,
-                source="openalex",
-                query=body.query,
-                params={"limit": body.limit, "year_from": body.year_from, "year_to": body.year_to},
-                paper_ids=paper_ids,
+    def run_search_endpoint(body: SearchIn) -> dict[str, Any]:
+        from saari.sources import run_search
+        from saari.sources.scopus import ScopusError
+
+        try:
+            return run_search(
+                body.query,
+                source=body.source,
+                limit=body.limit,
+                year_from=body.year_from,
+                year_to=body.year_to,
+                project_root=paths.project_root(),
             )
-        return {
-            "search_id": search_id,
-            "query": body.query,
-            "n_fetched": len(fetched),
-            "n_new": sum(1 for pid in paper_ids if pid not in existing_ids),
-            "n_duplicate": sum(1 for pid in paper_ids if pid in existing_ids),
-            "paper_ids": paper_ids,
-        }
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        except ScopusError as e:
+            raise HTTPException(502, str(e)) from None
 
     @app.get("/api/searches/{search_id}/results")
     def search_results(search_id: int) -> dict[str, Any]:

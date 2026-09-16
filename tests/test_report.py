@@ -161,3 +161,13 @@ def test_build_prisma_papers_outside_searches():
     assert "other: 1" in mmd
     svg = report.render_prisma_svg(d)
     assert "other: 1" in svg
+
+
+def test_limitations_sources_bullet_is_factual():
+    single = report.limitations_block({"openalex": 80, "snowball": 20})
+    assert "Single bibliographic source" in single
+    multi = report.limitations_block({"openalex": 80, "scopus": 40, "snowball": 20})
+    assert "Single bibliographic source" not in multi
+    assert "2 databases (openalex, scopus)" in multi
+    # No source info at all: keep the conservative single-source wording.
+    assert "Single bibliographic source" in report.limitations_block(None)

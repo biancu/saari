@@ -24,7 +24,6 @@ from saari.export import (
 from saari.models import Paper
 from saari.projection import project_corpus as _project_corpus
 from saari.snowball import snowball as _snowball
-from saari.sources import openalex as openalex_src
 
 app = typer.Typer(
     help="saari - agent-driven literature review toolkit (saaristo project)",
@@ -201,30 +200,45 @@ def search(
     limit: Annotated[int, typer.Option("--limit", "-n", help="Max results")] = 25,
     year_from: Annotated[int | None, typer.Option("--year-from")] = None,
     year_to: Annotated[int | None, typer.Option("--year-to")] = None,
+    source: Annotated[
+        str, typer.Option("--source", "-s", help="openalex | scopus")
+    ] = "openalex",
 ) -> None:
-    """Search OpenAlex and persist results into the current project."""
+    """Search a bibliographic source and persist results into the current project.
+
+    Scopus needs SCOPUS_API_KEY (and, off a registered institutional
+    network, SCOPUS_INST_TOKEN). Results found by both sources are
+    deduplicated by DOI.
+    """
+    from saari.sources import run_search
+    from saari.sources.scopus import ScopusError
+
     root = _resolve_root()
-    console.print(f"[dim]OpenAlex search:[/] {query!r}  limit={limit}  @ {root}")
-    fetched = openalex_src.search(
-        query, limit=limit, year_from=year_from, year_to=year_to, project_root=root
-    )
-    if not fetched:
+    console.print(f"[dim]{source} search:[/] {query!r}  limit={limit}  @ {root}")
+    try:
+        result = run_search(
+            query,
+            source=source,
+            limit=limit,
+            year_from=year_from,
+            year_to=year_to,
+            project_root=root,
+        )
+    except (ValueError, ScopusError) as e:
+        console.print(f"[red]error:[/] {e}")
+        raise typer.Exit(2) from None
+    if result["n_fetched"] == 0:
         console.print("[yellow]No results.[/]")
         return
 
+    console.print(
+        f"[green]Persisted[/] {result['n_fetched']} papers "
+        f"(search #{result['search_id']}, new={result['n_new']}, "
+        f"duplicate={result['n_duplicate']})"
+    )
     with db.connect(paths.db_path(root)) as con:
-        for paper, raw_path in fetched:
-            db.upsert_paper(con, paper, raw_path=raw_path)
-        search_id = db.record_search(
-            con,
-            source="openalex",
-            query=query,
-            params={"limit": limit, "year_from": year_from, "year_to": year_to},
-            paper_ids=[p.id for p, _ in fetched],
-        )
-
-    console.print(f"[green]Persisted[/] {len(fetched)} papers (search #{search_id})")
-    _print_paper_table([p for p, _ in fetched])
+        papers = [p for pid in result["paper_ids"] if (p := db.get_paper(con, pid))]
+    _print_paper_table(papers)
 
 
 @app.command()

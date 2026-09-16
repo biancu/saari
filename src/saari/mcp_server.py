@@ -34,7 +34,6 @@ from saari.export import (
 from saari.models import Paper
 from saari.projection import project_corpus as _project_corpus
 from saari.snowball import snowball as _snowball
-from saari.sources import openalex as oa
 
 mcp = FastMCP("saari")
 
@@ -129,45 +128,28 @@ def search(
     limit: int = 25,
     year_from: int | None = None,
     year_to: int | None = None,
+    source: str = "openalex",
 ) -> dict[str, Any]:
-    """Search OpenAlex and persist results into the project.
+    """Search a bibliographic source and persist results into the project.
+
+    `source`: "openalex" (default, keyless) or "scopus" (needs
+    SCOPUS_API_KEY, and SCOPUS_INST_TOKEN off a registered institutional
+    network; Scopus records may lack abstracts). Results are deduplicated
+    across sources by DOI.
 
     Returns a summary (`search_id`, counts, `paper_ids`). Use `papers_list`
     or `paper_show` to read the actual paper data.
     """
-    root = paths.project_root()
-    fetched = oa.search(
-        query, limit=limit, year_from=year_from, year_to=year_to, project_root=root
+    from saari.sources import run_search
+
+    return run_search(
+        query,
+        source=source,
+        limit=limit,
+        year_from=year_from,
+        year_to=year_to,
+        project_root=paths.project_root(),
     )
-    paper_ids = [p.id for p, _ in fetched]
-
-    existing_ids: set[str] = set()
-    with db.connect(paths.db_path(root)) as con:
-        if paper_ids:
-            rows = con.execute(
-                f"SELECT id FROM paper WHERE id IN ({','.join(['?'] * len(paper_ids))})",
-                paper_ids,
-            ).fetchall()
-            existing_ids = {row["id"] for row in rows}
-        for paper, raw_path in fetched:
-            db.upsert_paper(con, paper, raw_path=raw_path)
-        search_id = db.record_search(
-            con,
-            source="openalex",
-            query=query,
-            params={"limit": limit, "year_from": year_from, "year_to": year_to},
-            paper_ids=paper_ids,
-        )
-
-    return {
-        "search_id": search_id,
-        "source": "openalex",
-        "query": query,
-        "n_fetched": len(fetched),
-        "n_new": sum(1 for pid in paper_ids if pid not in existing_ids),
-        "n_duplicate": sum(1 for pid in paper_ids if pid in existing_ids),
-        "paper_ids": paper_ids,
-    }
 
 
 @mcp.tool()

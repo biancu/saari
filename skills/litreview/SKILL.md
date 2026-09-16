@@ -48,6 +48,11 @@ criteria are not systematic and will weaken the exported review.
 
 - Run several differently-phrased searches (`search`), not one. OpenAlex is
   keyword-sensitive; 3-6 query variants with year bounds beat one big query.
+- If `SCOPUS_API_KEY` is configured, repeat the key queries with
+  `source="scopus"` — a second database strengthens PRISMA coverage, and
+  results are deduplicated by DOI automatically. If Scopus errors mention
+  IP ranges or InstToken, relay the message to the user (it is an
+  institutional-access problem, not a bug) and continue with OpenAlex.
 - Duplicates are deduplicated automatically; a paper seen in multiple
   searches is a relevance signal (`seen_in` on paper cards).
 - After searching, run `refresh` once to embed new papers and re-project the

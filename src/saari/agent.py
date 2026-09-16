@@ -29,7 +29,6 @@ from saari.embed import (
 from saari.export import export_bibtex as _export_bibtex
 from saari.projection import project_corpus as _project_corpus
 from saari.snowball import snowball as _snowball
-from saari.sources import openalex as oa
 
 
 def _has_api_key() -> bool:
@@ -92,24 +91,27 @@ def _build_agent():  # type: ignore[no-untyped-def]
     # ---------- searches ----------
 
     @agent.tool_plain
-    def search_openalex(
+    def search(
         query: str,
         limit: int = 25,
         year_from: int | None = None,
         year_to: int | None = None,
+        source: str = "openalex",
     ) -> dict[str, Any]:
-        """Run an OpenAlex search and persist results. Returns search_id + counts."""
-        root = paths.project_root()
-        fetched = oa.search(query, limit=limit, year_from=year_from, year_to=year_to, project_root=root)
-        ids = [p.id for p, _ in fetched]
-        with db.connect(paths.db_path(root)) as con:
-            for paper, raw_path in fetched:
-                db.upsert_paper(con, paper, raw_path=raw_path)
-            sid = db.record_search(
-                con, "openalex", query,
-                {"limit": limit, "year_from": year_from, "year_to": year_to}, ids,
-            )
-        return {"search_id": sid, "n_fetched": len(ids), "paper_ids": ids}
+        """Search a bibliographic source ("openalex" or "scopus") and persist results.
+
+        Returns search_id + counts. Scopus needs SCOPUS_API_KEY configured.
+        """
+        from saari.sources import run_search
+
+        return run_search(
+            query,
+            source=source,
+            limit=limit,
+            year_from=year_from,
+            year_to=year_to,
+            project_root=paths.project_root(),
+        )
 
     @agent.tool_plain
     def searches_list(limit: int = 20) -> dict[str, Any]:

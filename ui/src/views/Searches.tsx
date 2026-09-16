@@ -16,6 +16,7 @@ export function Searches() {
   const [limit, setLimit] = useState(25);
   const [yearFrom, setYearFrom] = useState<string>("");
   const [yearTo, setYearTo] = useState<string>("");
+  const [source, setSource] = useState("openalex");
   const [running, setRunning] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -46,6 +47,7 @@ export function Searches() {
         limit,
         year_from: yearFrom ? Number(yearFrom) : undefined,
         year_to: yearTo ? Number(yearTo) : undefined,
+        source,
       });
       setMsg(
         `fetched ${r.n_fetched} (new ${r.n_new}, dup ${r.n_duplicate}) — search #${r.search_id}`,
@@ -62,13 +64,22 @@ export function Searches() {
     <div className="flex flex-1 min-w-0 min-h-0">
       <div className="w-72 border-r border-zinc-800 flex flex-col">
         <div className="border-b border-zinc-800 p-3">
-          <h2 className="text-sm font-semibold text-zinc-200 mb-2">New OpenAlex search</h2>
+          <h2 className="text-sm font-semibold text-zinc-200 mb-2">New search</h2>
           <form onSubmit={run} className="space-y-2">
             <Input
               placeholder="query…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+            <select
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              title="Scopus needs SCOPUS_API_KEY on the server"
+              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-zinc-600"
+            >
+              <option value="openalex">OpenAlex (keyless)</option>
+              <option value="scopus">Scopus (needs API key)</option>
+            </select>
             <div className="flex gap-1.5">
               <Input
                 placeholder="from"

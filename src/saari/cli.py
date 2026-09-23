@@ -16,10 +16,12 @@ from saari.embed import (
 )
 from saari.export import (
     export_bibtex as _export_bibtex,
+    export_csv as _export_csv,
     export_paper as _export_paper,
     export_prisma as _export_prisma,
     export_slides as _export_slides,
     export_slr as _export_slr,
+    export_xlsx as _export_xlsx,
 )
 from saari.models import Paper
 from saari.projection import project_corpus as _project_corpus
@@ -751,6 +753,36 @@ def export_bibtex_cmd(
     root = _resolve_root()
     target = out or (paths.papers_dir(root) / "refs.bib")
     r = _export_bibtex(target, status_filter=status, project_root=root)
+    console.print(
+        f"[green]Wrote[/] {r.n_entries} {status or 'all'} papers  "
+        f"format={r.format}  path={r.path}"
+    )
+
+
+@export_app.command("csv")
+def export_csv_cmd(
+    out: Annotated[Path | None, typer.Option("--out", help="Output path (default: papers/corpus.csv)")] = None,
+    status: Annotated[str | None, typer.Option("--status", help="Filter by status (default: all papers)")] = None,
+) -> None:
+    """Export the corpus to a CSV spreadsheet (opens in Excel; one row per paper)."""
+    root = _resolve_root()
+    target = out or (paths.papers_dir(root) / "corpus.csv")
+    r = _export_csv(target, status_filter=status, project_root=root)
+    console.print(
+        f"[green]Wrote[/] {r.n_entries} {status or 'all'} papers  "
+        f"format={r.format}  path={r.path}"
+    )
+
+
+@export_app.command("xlsx")
+def export_xlsx_cmd(
+    out: Annotated[Path | None, typer.Option("--out", help="Output path (default: papers/corpus.xlsx)")] = None,
+    status: Annotated[str | None, typer.Option("--status", help="Filter by status (default: all papers)")] = None,
+) -> None:
+    """Export the corpus to an .xlsx workbook (bold frozen header, autofilter, sized columns)."""
+    root = _resolve_root()
+    target = out or (paths.papers_dir(root) / "corpus.xlsx")
+    r = _export_xlsx(target, status_filter=status, project_root=root)
     console.print(
         f"[green]Wrote[/] {r.n_entries} {status or 'all'} papers  "
         f"format={r.format}  path={r.path}"

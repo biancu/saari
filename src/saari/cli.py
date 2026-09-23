@@ -203,6 +203,14 @@ def search(
     source: Annotated[
         str, typer.Option("--source", "-s", help="openalex | scopus")
     ] = "openalex",
+    subjarea: Annotated[
+        str | None,
+        typer.Option(
+            "--subjarea",
+            help="Scopus only: comma-separated subject-area codes to limit to, "
+            "e.g. COMP,ENGI,MATH. Ignored by OpenAlex.",
+        ),
+    ] = None,
 ) -> None:
     """Search a bibliographic source and persist results into the current project.
 
@@ -213,6 +221,10 @@ def search(
     from saari.sources import run_search
     from saari.sources.scopus import ScopusError
 
+    subjareas = (
+        [c.strip().upper() for c in subjarea.split(",") if c.strip()] if subjarea else None
+    )
+
     root = _resolve_root()
     console.print(f"[dim]{source} search:[/] {query!r}  limit={limit}  @ {root}")
     try:
@@ -222,6 +234,7 @@ def search(
             limit=limit,
             year_from=year_from,
             year_to=year_to,
+            subjareas=subjareas,
             project_root=root,
         )
     except (ValueError, ScopusError) as e:

@@ -24,11 +24,13 @@ def _search_source(
     limit: int,
     year_from: int | None,
     year_to: int | None,
+    subjareas: list[str] | None,
     project_root: Path | None,
 ) -> list[tuple[Paper, str]]:
     if source == "openalex":
         from saari.sources import openalex
 
+        # OpenAlex has no SUBJAREA equivalent; the filter is Scopus-only.
         return openalex.search(
             query, limit=limit, year_from=year_from, year_to=year_to, project_root=project_root
         )
@@ -36,7 +38,12 @@ def _search_source(
         from saari.sources import scopus
 
         return scopus.search(
-            query, limit=limit, year_from=year_from, year_to=year_to, project_root=project_root
+            query,
+            limit=limit,
+            year_from=year_from,
+            year_to=year_to,
+            subjareas=subjareas,
+            project_root=project_root,
         )
     raise ValueError(f"unknown source {source!r}; available: {', '.join(SOURCE_NAMES)}")
 
@@ -48,6 +55,7 @@ def run_search(
     limit: int = 25,
     year_from: int | None = None,
     year_to: int | None = None,
+    subjareas: list[str] | None = None,
     project_root: Path | None = None,
 ) -> dict[str, Any]:
     """Search `source`, persist results, record the search event.
@@ -56,10 +64,20 @@ def run_search(
     corpus under another id (e.g. Scopus result already found via OpenAlex)
     is not inserted again - the search links to the existing record, which
     counts toward `seen_in` and `n_duplicate`.
+
+    `subjareas` (Scopus subject-area codes like ["COMP", "ENGI"]) narrows a
+    Scopus search to those areas; it is ignored by sources that have no
+    equivalent (OpenAlex).
     """
     root = project_root or paths.project_root()
     fetched = _search_source(
-        source, query, limit=limit, year_from=year_from, year_to=year_to, project_root=root
+        source,
+        query,
+        limit=limit,
+        year_from=year_from,
+        year_to=year_to,
+        subjareas=subjareas,
+        project_root=root,
     )
 
     paper_ids: list[str] = []
@@ -89,7 +107,12 @@ def run_search(
             con,
             source=source,
             query=query,
-            params={"limit": limit, "year_from": year_from, "year_to": year_to},
+            params={
+                "limit": limit,
+                "year_from": year_from,
+                "year_to": year_to,
+                "subjareas": subjareas,
+            },
             paper_ids=paper_ids,
         )
 

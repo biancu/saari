@@ -141,3 +141,41 @@ def test_missing_key_is_clear(project, monkeypatch):
 def test_unknown_source(project):
     with pytest.raises(ValueError, match="unknown source"):
         run_search("agents", source="wos", limit=5, project_root=project)
+
+
+def _capture_query(monkeypatch):
+    """Patch the Scopus client and capture the outgoing `query` param."""
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["query"] = request.url.params.get("query", "")
+        return httpx.Response(200, json=_page([_entry()]))
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.Client
+
+    def fake_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return real_client(**kwargs)
+
+    monkeypatch.setattr(scopus.httpx, "Client", fake_client)
+    return seen
+
+
+def test_subjarea_filter_appended(project, monkeypatch):
+    seen = _capture_query(monkeypatch)
+    run_search(
+        "agents", source="scopus", limit=5, subjareas=["COMP", "ENGI", "MATH"], project_root=project
+    )
+    q = seen["query"]
+    # SUBJAREA is a top-level field code: it must sit OUTSIDE TITLE-ABS-KEY.
+    assert q == (
+        "TITLE-ABS-KEY(agents) AND "
+        "(SUBJAREA(COMP) OR SUBJAREA(ENGI) OR SUBJAREA(MATH))"
+    )
+
+
+def test_no_subjarea_leaves_query_untouched(project, monkeypatch):
+    seen = _capture_query(monkeypatch)
+    run_search("agents", source="scopus", limit=5, project_root=project)
+    assert seen["query"] == "TITLE-ABS-KEY(agents)"

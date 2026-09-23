@@ -152,6 +152,128 @@ def export_bibtex(
 
 
 # --------------------------------------------------------------------------- #
+# Tabular export (CSV / XLSX): a flat spreadsheet of the corpus, one row per
+# paper. Handy for screening in Excel or sharing the raw hit list.
+# --------------------------------------------------------------------------- #
+
+# (header, Paper attribute) pairs; drives both CSV and XLSX so they stay in sync.
+_TABLE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("id", "id"),
+    ("doi", "doi"),
+    ("title", "title"),
+    ("year", "year"),
+    ("venue", "venue"),
+    ("authors", "authors"),
+    ("cited_by", "cited_by_count"),
+    ("status", "status"),
+    ("seen_in", "seen_in"),
+    ("url", "url"),
+    ("abstract", "abstract"),
+)
+
+_TABLE_WIDTHS = {
+    "id": 18, "doi": 22, "title": 60, "year": 6, "venue": 28, "authors": 40,
+    "cited_by": 9, "status": 12, "seen_in": 8, "url": 40, "abstract": 80,
+}
+
+
+def _table_row(paper: Paper) -> list[object]:
+    authors = "; ".join(a.name.strip() for a in paper.authors if a.name)
+    url = paper.landing_page_url or paper.pdf_url or (
+        f"https://doi.org/{paper.doi}" if paper.doi else ""
+    )
+    return [
+        paper.id,
+        paper.doi or "",
+        paper.title or "",
+        paper.year if paper.year is not None else "",
+        paper.venue or "",
+        authors,
+        paper.cited_by_count if paper.cited_by_count is not None else "",
+        paper.status,
+        paper.seen_in,
+        url,
+        paper.abstract or "",
+    ]
+
+
+def _corpus(status_filter: str | None, root: Path) -> list[Paper]:
+    with db.connect(paths.db_path(root)) as con:
+        return db.list_papers(
+            con,
+            limit=1_000_000,
+            status=status_filter,
+            order_by="cited_by_count DESC NULLS LAST, year DESC NULLS LAST",
+        )
+
+
+def export_csv(
+    out: Path,
+    status_filter: str | None = None,
+    project_root: Path | None = None,
+) -> ExportResult:
+    """Export the corpus to a CSV spreadsheet. Default: all papers.
+
+    Written as UTF-8 with a BOM so Excel opens non-ASCII text (e.g. "ș")
+    correctly on Windows.
+    """
+    import csv
+
+    root = project_root or paths.project_root()
+    papers = _corpus(status_filter, root)
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow([h for h, _ in _TABLE_COLUMNS])
+        for p in papers:
+            w.writerow(_table_row(p))
+    return ExportResult(path=str(out), n_entries=len(papers), format="csv")
+
+
+def export_xlsx(
+    out: Path,
+    status_filter: str | None = None,
+    project_root: Path | None = None,
+) -> ExportResult:
+    """Export the corpus to an .xlsx workbook. Default: all papers.
+
+    Bold frozen header row, autofilter, and sized columns.
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+        from openpyxl.utils import get_column_letter
+    except ModuleNotFoundError as e:  # pragma: no cover - openpyxl is a declared dep
+        raise RuntimeError(
+            "xlsx export needs openpyxl. Reinstall saari (openpyxl is a declared "
+            "dependency), or install it with `pip install openpyxl`. CSV export "
+            "(`saari export csv`) has no such dependency."
+        ) from e
+
+    root = project_root or paths.project_root()
+    papers = _corpus(status_filter, root)
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "papers"
+    ws.append([h for h, _ in _TABLE_COLUMNS])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for p in papers:
+        ws.append(_table_row(p))
+    ws.freeze_panes = "A2"
+    if papers:
+        ws.auto_filter.ref = ws.dimensions
+    for idx, (header, _) in enumerate(_TABLE_COLUMNS, start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = _TABLE_WIDTHS.get(header, 16)
+    wb.save(out)
+    return ExportResult(path=str(out), n_entries=len(papers), format="xlsx")
+
+
+# --------------------------------------------------------------------------- #
 # SLR report artifacts (PRISMA diagram, manuscript, slides, one-shot bundle).
 # `report` is imported lazily inside each function: report.py imports
 # `_citation_key` from this module, so a top-level import would be circular.

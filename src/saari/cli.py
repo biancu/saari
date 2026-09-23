@@ -16,10 +16,12 @@ from saari.embed import (
 )
 from saari.export import (
     export_bibtex as _export_bibtex,
+    export_csv as _export_csv,
     export_paper as _export_paper,
     export_prisma as _export_prisma,
     export_slides as _export_slides,
     export_slr as _export_slr,
+    export_xlsx as _export_xlsx,
 )
 from saari.models import Paper
 from saari.projection import project_corpus as _project_corpus
@@ -203,6 +205,14 @@ def search(
     source: Annotated[
         str, typer.Option("--source", "-s", help="openalex | scopus")
     ] = "openalex",
+    subjarea: Annotated[
+        str | None,
+        typer.Option(
+            "--subjarea",
+            help="Scopus only: comma-separated subject-area codes to limit to, "
+            "e.g. COMP,ENGI,MATH. Ignored by OpenAlex.",
+        ),
+    ] = None,
 ) -> None:
     """Search a bibliographic source and persist results into the current project.
 
@@ -213,6 +223,10 @@ def search(
     from saari.sources import run_search
     from saari.sources.scopus import ScopusError
 
+    subjareas = (
+        [c.strip().upper() for c in subjarea.split(",") if c.strip()] if subjarea else None
+    )
+
     root = _resolve_root()
     console.print(f"[dim]{source} search:[/] {query!r}  limit={limit}  @ {root}")
     try:
@@ -222,6 +236,7 @@ def search(
             limit=limit,
             year_from=year_from,
             year_to=year_to,
+            subjareas=subjareas,
             project_root=root,
         )
     except (ValueError, ScopusError) as e:
@@ -738,6 +753,36 @@ def export_bibtex_cmd(
     root = _resolve_root()
     target = out or (paths.papers_dir(root) / "refs.bib")
     r = _export_bibtex(target, status_filter=status, project_root=root)
+    console.print(
+        f"[green]Wrote[/] {r.n_entries} {status or 'all'} papers  "
+        f"format={r.format}  path={r.path}"
+    )
+
+
+@export_app.command("csv")
+def export_csv_cmd(
+    out: Annotated[Path | None, typer.Option("--out", help="Output path (default: papers/corpus.csv)")] = None,
+    status: Annotated[str | None, typer.Option("--status", help="Filter by status (default: all papers)")] = None,
+) -> None:
+    """Export the corpus to a CSV spreadsheet (opens in Excel; one row per paper)."""
+    root = _resolve_root()
+    target = out or (paths.papers_dir(root) / "corpus.csv")
+    r = _export_csv(target, status_filter=status, project_root=root)
+    console.print(
+        f"[green]Wrote[/] {r.n_entries} {status or 'all'} papers  "
+        f"format={r.format}  path={r.path}"
+    )
+
+
+@export_app.command("xlsx")
+def export_xlsx_cmd(
+    out: Annotated[Path | None, typer.Option("--out", help="Output path (default: papers/corpus.xlsx)")] = None,
+    status: Annotated[str | None, typer.Option("--status", help="Filter by status (default: all papers)")] = None,
+) -> None:
+    """Export the corpus to an .xlsx workbook (bold frozen header, autofilter, sized columns)."""
+    root = _resolve_root()
+    target = out or (paths.papers_dir(root) / "corpus.xlsx")
+    r = _export_xlsx(target, status_filter=status, project_root=root)
     console.print(
         f"[green]Wrote[/] {r.n_entries} {status or 'all'} papers  "
         f"format={r.format}  path={r.path}"

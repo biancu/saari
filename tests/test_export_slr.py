@@ -82,6 +82,49 @@ def test_theme_groups_use_openalex_topics(project):
     assert set(groups) == {"Topic Modeling", "Semantic Web and Ontologies"}
 
 
+def test_export_csv_all_papers(project, tmp_path):
+    import csv
+
+    out = tmp_path / "corpus.csv"
+    r = export.export_csv(out, project_root=project)
+    assert r.format == "csv"
+    assert r.n_entries == 4  # all statuses, no filter
+    with out.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 4
+    assert rows[0]["title"] == "Retrieval-Augmented Generation Survey"  # most-cited first
+    assert rows[0]["cited_by"] == "500"
+    assert rows[0]["authors"] == "Author W1"
+    assert "status" in rows[0] and "url" in rows[0]
+
+
+def test_export_csv_status_filter(project, tmp_path):
+    import csv
+
+    out = tmp_path / "included.csv"
+    r = export.export_csv(out, status_filter="included", project_root=project)
+    assert r.n_entries == 2
+    with out.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert {row["id"] for row in rows} == {"openalex:W1", "openalex:W2"}
+
+
+def test_export_xlsx_all_papers(project, tmp_path):
+    openpyxl = pytest.importorskip("openpyxl")
+
+    out = tmp_path / "corpus.xlsx"
+    r = export.export_xlsx(out, project_root=project)
+    assert r.format == "xlsx"
+    assert r.n_entries == 4
+    assert out.exists()
+    wb = openpyxl.load_workbook(out)
+    ws = wb.active
+    assert ws.title == "papers"
+    assert [c.value for c in ws[1]][:3] == ["id", "doi", "title"]
+    assert ws.max_row == 5  # header + 4 papers
+    assert ws.freeze_panes == "A2"
+
+
 def test_export_slr_writes_full_bundle(project):
     r = export.export_slr(project_root=project)
     out = paths.papers_dir(project) / "review"

@@ -148,14 +148,24 @@ def search(
     limit: int = 25,
     year_from: int | None = None,
     year_to: int | None = None,
+    subjareas: list[str] | None = None,
     project_root: Path | None = None,
 ) -> list[tuple[Paper, str]]:
     """Search Scopus TITLE-ABS-KEY. Returns [(paper, raw_path), ...].
 
     Persists each raw entry under `.saaristo/raw/scopus/<id>.json`.
+
+    `subjareas` is an optional list of Scopus subject-area codes (e.g.
+    ["COMP", "ENGI", "MATH"]). They are OR'd together and AND'ed onto the
+    query *outside* the TITLE-ABS-KEY wrapper - `SUBJAREA` is a top-level
+    field code and cannot be nested inside TITLE-ABS-KEY.
     """
+    scopus_query = f"TITLE-ABS-KEY({query})"
+    if subjareas:
+        clause = " OR ".join(f"SUBJAREA({code})" for code in subjareas)
+        scopus_query = f"{scopus_query} AND ({clause})"
     params: dict[str, Any] = {
-        "query": f"TITLE-ABS-KEY({query})",
+        "query": scopus_query,
         "count": min(limit, PAGE_SIZE),
         "start": 0,
     }
